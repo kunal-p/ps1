@@ -14,10 +14,13 @@
 #[feature(globs)];
 use std::io::*;
 use std::io::net::ip::{SocketAddr};
-use std::{str};
+use std::{str,os};
+use std::str;
+use std::io::File;
 
 static IP: &'static str = "127.0.0.1";
 static PORT:        int = 4414;
+static mut COUNT: int =0;
 
 fn main() {
     let addr = from_str::<SocketAddr>(format!("{:s}:{:d}", IP, PORT)).unwrap();
@@ -42,9 +45,38 @@ fn main() {
             
             let mut buf = [0, ..500];
             stream.read(buf);
-            let request_str = str::from_utf8(buf);
+            let request_str = str::from_utf8(buf).to_owned();
+	    if(request_str.contains("GET")){
+		let tempstr: ~[&str]= request_str.split(' ').collect();
+		if(tempstr[1].len() >2){
+			let file = Path::new(tempstr[1].slice_from(1));
+			println!("{}",tempstr[1].slice_from(1));
+			if tempstr[1].ends_with(".html") {
+                    match result(|| File::open(&file)) {
+                        Ok(mut f) => {
+			    println!("FILE OK");
+                            let response: ~[u8] = f.read_to_end();
+                            stream.write(response);
+                        } ,
+                        Err(e) => {
+                            if e.kind == PermissionDenied {
+                                stream.write("404".as_bytes());
+                            } 
+			    else if e.kind == FileNotFound {
+                                stream.write("404".as_bytes());
+                            } 
+			    else {
+                                stream.write("io error".as_bytes());
+                            }
+                        }
+                    }
+                } 
+		}
+	    }
             println(format!("Received request :\n{:s}", request_str));
-            
+	    unsafe{
+	       COUNT +=1;
+	    
             let response: ~str = 
                 ~"HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n
                  <doctype !html><html><head><title>Hello, Rust!</title>
@@ -54,9 +86,15 @@ fn main() {
                  </style></head>
                  <body>
                  <h1>Greetings, Krusty!</h1>
-                 </body></html>\r\n";
+                 <h2> Visitors:" + COUNT.to_str() + "</h2></body></html>\r\n";
             stream.write(response.as_bytes());
             println!("Connection terminates.");
+            }
         }
     }
 }
+
+//fn loadFile(path: &str)-> &str{
+	 
+
+//}
